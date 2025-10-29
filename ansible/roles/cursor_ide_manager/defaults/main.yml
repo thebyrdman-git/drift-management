@@ -1,0 +1,65 @@
+---
+# Cursor IDE Manager - Opinionated Development Environment Standards
+
+# Cursor installation (enforced version)
+cursor_version: "latest"  # Or pin to specific version
+cursor_install_method: "appimage"  # appimage, snap, manual
+
+# Settings synchronization (opinionated defaults)
+sync_cursor_settings: true
+cursor_settings_source: "{{ ansible_user_dir }}/.config/Cursor/User/settings.json"
+
+# AI Model preferences (standardized)
+cursor_default_model: "claude-sonnet-4.5"  # Primary AI model
+cursor_fallback_model: "gpt-4o"  # Fallback if primary unavailable
+
+# Editor settings (opinionated)
+editor_standards:
+  font_family: "JetBrains Mono"
+  font_size: 14
+  tab_size: 2  # Spaces, not tabs
+  insert_spaces: true  # Never use tabs
+  trim_trailing_whitespace: true
+  insert_final_newline: true
+  format_on_save: true
+  format_on_paste: true
+  auto_save: "onFocusChange"
+
+# Extensions (standardized set)
+required_extensions:
+  - "redhat.ansible"  # Ansible syntax
+  - "ms-python.python"  # Python
+  - "esbenp.prettier-vscode"  # Code formatting
+  - "DavidAnson.vscode-markdownlint"  # Markdown linting
+  - "ms-azuretools.vscode-docker"  # Docker support
+  - "GitHub.copilot"  # Optional: GitHub Copilot
+
+# Project-specific settings
+project_cursor_settings:
+  enable_format_on_save: true
+  enable_auto_import: true
+  enable_quick_suggestions: true
+
+# Rules synchronization (.cursorrules, AGENTS.md, GEMINI.md)
+sync_cursor_rules: true
+cursor_rules_locations:
+  - "{{ ansible_user_dir }}/.cursorrules"  # Global
+  - "{{ ansible_user_dir }}/AGENTS.md"  # Global agent config
+  - "{{ ansible_user_dir }}/GEMINI.md"  # Global Gemini config
+
+# Sync to authoritative source (MiracleMax)
+authoritative_config_source: "miraclemax.local"
+pull_config_from_source: true  # Pull from MiracleMax on setup
+push_config_to_source: false  # Push to MiracleMax on changes
+
+# Keybindings (standardized)
+standardize_keybindings: true
+keybindings_source: "{{ ansible_user_dir }}/.config/Cursor/User/keybindings.json"
+
+# Snippets (shared across machines)
+sync_snippets: true
+snippets_directory: "{{ ansible_user_dir }}/.config/Cursor/User/snippets"
+
+# Workspace settings (per-project)
+apply_workspace_standards: true
+

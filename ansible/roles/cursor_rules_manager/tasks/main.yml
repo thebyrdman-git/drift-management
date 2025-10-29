@@ -1,0 +1,97 @@
+---
+# Cursor Rules Manager - Sync .cursorrules and agent configurations
+
+- name: Create backup directory
+  ansible.builtin.file:
+    path: "{{ backup_location }}"
+    state: directory
+    mode: '0755'
+  when: backup_before_sync | default(true)
+  tags: [backup]
+
+- name: Backup current global rules
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ backup_location }}/{{ item | basename }}.{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+  loop: "{{ local_rules_locations.global }}"
+  when: backup_before_sync | default(true)
+  ignore_errors: true
+  tags: [backup]
+
+- name: Sync global .cursorrules (pull from source)
+  ansible.posix.synchronize:
+    src: "{{ rules_source_host }}:{{ rules_source_dir }}/.cursorrules"
+    dest: "{{ ansible_user_dir }}/.cursorrules"
+    mode: pull
+  when: sync_direction == "pull"
+  tags: [sync, global]
+
+- name: Sync AGENTS.md (pull from source)
+  ansible.posix.synchronize:
+    src: "{{ rules_source_host }}:{{ rules_source_dir }}/AGENTS.md"
+    dest: "{{ ansible_user_dir }}/AGENTS.md"
+    mode: pull
+  when: sync_direction == "pull"
+  tags: [sync, global]
+
+- name: Sync GEMINI.md (pull from source)
+  ansible.posix.synchronize:
+    src: "{{ rules_source_host }}:{{ rules_source_dir }}/GEMINI.md"
+    dest: "{{ ansible_user_dir }}/GEMINI.md"
+    mode: pull
+  when: sync_direction == "pull"
+  ignore_errors: true
+  tags: [sync, global]
+
+- name: Sync project-specific .cursorrules
+  ansible.posix.synchronize:
+    src: "{{ rules_source_host }}:{{ item.value }}"
+    dest: "{{ item.value }}"
+    mode: pull
+  loop: "{{ local_rules_locations.projects | dict2items }}"
+  when: sync_direction == "pull"
+  ignore_errors: true
+  tags: [sync, projects]
+
+- name: Push global rules to source (if configured)
+  ansible.posix.synchronize:
+    src: "{{ item }}"
+    dest: "{{ rules_source_host }}:{{ rules_source_dir }}/{{ item | basename }}"
+    mode: push
+  loop: "{{ local_rules_locations.global }}"
+  when: sync_direction == "push"
+  tags: [sync, push]
+
+- name: Validate AGENTS.md exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/AGENTS.md"
+  register: agents_md_check
+  failed_when: 
+    - require_agents_md | default(true)
+    - not agents_md_check.stat.exists
+  tags: [validate]
+
+- name: Validate .cursorrules exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.cursorrules"
+  register: cursorrules_check
+  failed_when:
+    - require_cursorrules | default(true)
+    - not cursorrules_check.stat.exists
+  tags: [validate]
+
+- name: Display sync summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Cursor rules synchronized
+      
+      📋 Rules synced:
+      • Global .cursorrules: {{ 'synced' if cursorrules_check.stat.exists else 'missing' }}
+      • AGENTS.md: {{ 'synced' if agents_md_check.stat.exists else 'missing' }}
+      • GEMINI.md: synced
+      • Project rules: {{ local_rules_locations.projects | length }} projects
+      
+      🎯 AI assistant behavior now consistent across systems!
+  tags: [always]
+

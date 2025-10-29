@@ -1,0 +1,90 @@
+---
+- name: Setup Cursor IDE Environment with Opinionated Standards
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+    # Opinionated defaults (can be overridden)
+    authoritative_config_source: "miraclemax.local"
+    pull_config_from_source: true
+    install_cursor: true
+    
+  pre_tasks:
+    - name: Display Cursor environment setup standards
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          💻 CURSOR IDE ENVIRONMENT SETUP
+          ════════════════════════════════════════════════════════
+          
+          Opinionated standards that will be enforced:
+          
+          ✅ Editor Settings:
+             • Font: JetBrains Mono, 14pt
+             • Indentation: 2 spaces (NEVER tabs)
+             • Format on save: enabled
+             • Trim whitespace: enabled
+             • Auto-save: on focus change
+          
+          ✅ AI Configuration:
+             • Primary model: claude-sonnet-4.5
+             • Fallback: gpt-4o
+             • Rules: synced from {{ authoritative_config_source }}
+          
+          ✅ Extensions (required):
+             • Ansible (YAML syntax)
+             • Python
+             • Prettier (formatting)
+             • Markdown linting
+             • Docker support
+          
+          ✅ Rules Synchronization:
+             • Global .cursorrules
+             • AGENTS.md (assistant behavior)
+             • GEMINI.md (Gemini config)
+             • Project-specific rules
+          
+          ✅ Consistency Goal:
+             Same development environment across:
+             • Laptop
+             • MiracleMax
+             • Future systems
+          
+          ════════════════════════════════════════════════════════
+      tags: [always]
+  
+  roles:
+    - role: cursor_ide_manager
+      tags: [cursor, ide]
+    
+    - role: cursor_rules_manager
+      tags: [rules, agents]
+  
+  post_tasks:
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          ✅ CURSOR ENVIRONMENT SETUP COMPLETE
+          ════════════════════════════════════════════════════════
+          
+          🎯 What was configured:
+          • Cursor IDE installed/updated
+          • Settings synced from {{ authoritative_config_source }}
+          • Extensions installed
+          • Global rules synchronized
+          • Project rules synchronized
+          
+          🔄 To update rules later:
+          ansible-playbook setup-cursor-environment.yml --tags rules
+          
+          💡 To push local changes to source:
+          ansible-playbook setup-cursor-environment.yml -e "sync_direction=push"
+          
+          📝 Edit standards:
+          • Settings: drift-management/ansible/roles/cursor_ide_manager/defaults/main.yml
+          • Rules source: {{ authoritative_config_source }}
+          
+          ════════════════════════════════════════════════════════
+      tags: [always]
+

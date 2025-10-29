@@ -1,0 +1,33 @@
+---
+# Cursor Rules Manager - Standardize AI Assistant Behavior
+
+# Authoritative source for rules
+rules_source_host: "miraclemax.local"
+rules_source_dir: "/home/jbyrd"
+
+# Local rules locations
+local_rules_locations:
+  global:
+    - "{{ ansible_user_dir }}/.cursorrules"
+    - "{{ ansible_user_dir }}/AGENTS.md"
+    - "{{ ansible_user_dir }}/GEMINI.md"
+  
+  projects:
+    pai: "{{ ansible_user_dir }}/pai/.cursorrules"
+    tam_tools: "{{ ansible_user_dir }}/tam-tools/.cursorrules"
+    ai_infrastructure: "{{ ansible_user_dir }}/ai-infrastructure/.cursorrules"
+    ansibleize: "{{ ansible_user_dir }}/ansibleize-everything/.cursorrules"
+    drift_management: "{{ ansible_user_dir }}/drift-management/.cursorrules"
+
+# Sync direction
+sync_direction: "pull"  # pull from source, or push to source
+
+# Validation (enforce standards)
+validate_rules: true
+require_agents_md: true
+require_cursorrules: true
+
+# Backup before sync
+backup_before_sync: true
+backup_location: "{{ ansible_user_dir }}/backups/cursor-rules"
+

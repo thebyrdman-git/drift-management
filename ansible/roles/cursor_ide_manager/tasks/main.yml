@@ -1,0 +1,125 @@
+---
+# Cursor IDE Manager - Standardize Development Environment
+
+- name: Check if Cursor is installed
+  ansible.builtin.command: which cursor
+  register: cursor_check
+  failed_when: false
+  changed_when: false
+  tags: [check]
+
+- name: Display Cursor installation status
+  ansible.builtin.debug:
+    msg: "{{ 'Cursor IDE found' if cursor_check.rc == 0 else 'Cursor IDE not found - will install' }}"
+  tags: [check]
+
+- name: Include installation tasks
+  include_tasks: install-cursor.yml
+  when: 
+    - cursor_check.rc != 0
+    - install_cursor | default(true)
+  tags: [install]
+
+- name: Create Cursor configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ ansible_user_dir }}/.config/Cursor"
+    - "{{ ansible_user_dir }}/.config/Cursor/User"
+    - "{{ ansible_user_dir }}/.config/Cursor/User/snippets"
+  tags: [configure]
+
+- name: Sync Cursor settings from authoritative source
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ cursor_settings_source }}"
+    dest: "{{ cursor_settings_source }}"
+    mode: pull
+  when: 
+    - pull_config_from_source | default(true)
+    - authoritative_config_source is defined
+  tags: [sync]
+
+- name: Apply opinionated settings template
+  ansible.builtin.template:
+    src: cursor-settings.json.j2
+    dest: "{{ cursor_settings_source }}"
+    mode: '0644'
+  when: not pull_config_from_source | default(false)
+  tags: [configure]
+
+- name: Sync keybindings
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ keybindings_source }}"
+    dest: "{{ keybindings_source }}"
+    mode: pull
+  when: 
+    - standardize_keybindings | default(true)
+    - pull_config_from_source | default(true)
+  tags: [sync]
+
+- name: Sync snippets directory
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ snippets_directory }}/"
+    dest: "{{ snippets_directory }}/"
+    mode: pull
+  when: 
+    - sync_snippets | default(true)
+    - pull_config_from_source | default(true)
+  tags: [sync]
+
+- name: Install required extensions
+  ansible.builtin.command:
+    cmd: cursor --install-extension {{ item }}
+  loop: "{{ required_extensions }}"
+  register: extension_install
+  changed_when: "'already installed' not in extension_install.stdout"
+  tags: [extensions]
+
+- name: Sync global .cursorrules
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ ansible_user_dir }}/.cursorrules"
+    dest: "{{ ansible_user_dir }}/.cursorrules"
+    mode: pull
+  when: 
+    - sync_cursor_rules | default(true)
+    - pull_config_from_source | default(true)
+  tags: [rules]
+
+- name: Sync AGENTS.md
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ ansible_user_dir }}/AGENTS.md"
+    dest: "{{ ansible_user_dir }}/AGENTS.md"
+    mode: pull
+  when: 
+    - sync_cursor_rules | default(true)
+    - pull_config_from_source | default(true)
+  tags: [rules]
+
+- name: Sync GEMINI.md
+  ansible.posix.synchronize:
+    src: "{{ authoritative_config_source }}:{{ ansible_user_dir }}/GEMINI.md"
+    dest: "{{ ansible_user_dir }}/GEMINI.md"
+    mode: pull
+  ignore_errors: true
+  when: 
+    - sync_cursor_rules | default(true)
+    - pull_config_from_source | default(true)
+  tags: [rules]
+
+- name: Display setup summary
+  ansible.builtin.debug:
+    msg: |
+      ✅ Cursor IDE configured with standards
+      
+      📋 What was configured:
+      • Settings synchronized from {{ authoritative_config_source | default('template') }}
+      • Extensions installed: {{ required_extensions | length }}
+      • Global rules synced (.cursorrules, AGENTS.md)
+      • Keybindings standardized
+      • Snippets synchronized
+      
+      🎯 Consistency achieved across development environments!
+  tags: [always]
+

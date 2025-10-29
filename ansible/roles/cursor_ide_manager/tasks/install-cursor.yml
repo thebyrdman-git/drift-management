@@ -1,0 +1,52 @@
+---
+# Install Cursor IDE
+
+- name: Download Cursor AppImage (Linux)
+  ansible.builtin.get_url:
+    url: "https://downloader.cursor.sh/linux/appImage/x64"
+    dest: "/tmp/cursor.AppImage"
+    mode: '0755'
+  when: 
+    - ansible_system == "Linux"
+    - cursor_install_method == "appimage"
+  tags: [install]
+
+- name: Install Cursor AppImage
+  ansible.builtin.copy:
+    src: "/tmp/cursor.AppImage"
+    dest: "{{ ansible_user_dir }}/.local/bin/cursor"
+    mode: '0755'
+    remote_src: true
+  when: 
+    - ansible_system == "Linux"
+    - cursor_install_method == "appimage"
+  tags: [install]
+
+- name: Create Cursor desktop entry
+  ansible.builtin.copy:
+    dest: "{{ ansible_user_dir }}/.local/share/applications/cursor.desktop"
+    content: |
+      [Desktop Entry]
+      Name=Cursor
+      Exec={{ ansible_user_dir }}/.local/bin/cursor %U
+      Terminal=false
+      Type=Application
+      Icon=cursor
+      StartupWMClass=Cursor
+      Comment=AI-powered code editor
+      Categories=Development;IDE;
+    mode: '0644'
+  when: ansible_system == "Linux"
+  tags: [install]
+
+- name: Verify Cursor installation
+  ansible.builtin.command: cursor --version
+  register: cursor_version_check
+  changed_when: false
+  tags: [install]
+
+- name: Display installation result
+  ansible.builtin.debug:
+    msg: "✅ Cursor installed: {{ cursor_version_check.stdout }}"
+  tags: [install]
+
