@@ -1,0 +1,43 @@
+---
+# Sync content via git push
+- name: Check if directory is a git repository
+  ansible.builtin.stat:
+    path: "{{ content_dir }}/.git"
+  register: git_dir
+
+- name: Skip if not a git repository
+  ansible.builtin.debug:
+    msg: "{{ content_dir }} is not a git repository, skipping git sync"
+  when: not git_dir.stat.exists
+
+- name: Get git status
+  ansible.builtin.command:
+    cmd: git status --porcelain
+    chdir: "{{ content_dir }}"
+  register: git_status
+  changed_when: false
+  when: git_dir.stat.exists
+
+- name: Check for uncommitted changes
+  ansible.builtin.debug:
+    msg: "WARNING: {{ content_dir }} has uncommitted changes"
+  when: 
+    - git_dir.stat.exists
+    - git_status.stdout | length > 0
+
+- name: Git push to remote
+  ansible.builtin.command:
+    cmd: git push {{ destination.target.split(':')[0] }} {{ destination.branch | default('main') }}
+    chdir: "{{ content_dir }}"
+  register: git_push_result
+  when: 
+    - git_dir.stat.exists
+    - destination.enabled | default(true)
+    - not ansible_check_mode
+  changed_when: "'Everything up-to-date' not in git_push_result.stderr"
+
+- name: Record git sync result
+  ansible.builtin.set_fact:
+    sync_results: "{{ sync_results | default([]) + [{'category': sync_config.category, 'type': 'git', 'target': destination.target, 'status': 'success' if git_push_result is success else 'failed'}] }}"
+  when: git_dir.stat.exists
+

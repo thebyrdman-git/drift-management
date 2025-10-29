@@ -1,0 +1,34 @@
+---
+# Sync content via rsync
+- name: Parse rsync target
+  ansible.builtin.set_fact:
+    rsync_host: "{{ destination.target.split(':')[0] }}"
+    rsync_path: "{{ destination.target.split(':')[1] }}"
+
+- name: Create backup before sync (if configured)
+  ansible.posix.synchronize:
+    src: "{{ rsync_path }}/"
+    dest: "{{ backup_dir }}/{{ sync_config.category }}-{{ ansible_date_time.iso8601_basic_short }}/"
+    mode: pull
+  delegate_to: "{{ rsync_host }}"
+  when: 
+    - sync_config.backup_before_sync | default(false)
+    - not ansible_check_mode
+  ignore_errors: true
+
+- name: Sync content via rsync
+  ansible.posix.synchronize:
+    src: "{{ content_dir }}/"
+    dest: "{{ destination.target }}/"
+    delete: "{{ destination.delete | default(false) }}"
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+      - "{% for pattern in sync_config.exclude_patterns | default([]) %}--exclude={{ pattern }}{% endfor %}"
+  register: rsync_result
+
+- name: Record sync result
+  ansible.builtin.set_fact:
+    sync_results: "{{ sync_results | default([]) + [{'category': sync_config.category, 'type': 'rsync', 'target': destination.target, 'status': 'success' if rsync_result is success else 'failed'}] }}"
+

@@ -1,0 +1,37 @@
+---
+# Process individual .sync-config.yml file
+- name: Read sync configuration
+  ansible.builtin.slurp:
+    src: "{{ config_file.path }}"
+  register: sync_config_content
+
+- name: Parse sync configuration
+  ansible.builtin.set_fact:
+    sync_config: "{{ sync_config_content.content | b64decode | from_yaml }}"
+
+- name: Get content directory path
+  ansible.builtin.set_fact:
+    content_dir: "{{ config_file.path | dirname }}"
+
+- name: Display sync configuration
+  ansible.builtin.debug:
+    msg: |
+      Processing: {{ content_dir }}
+      Category: {{ sync_config.category }}
+      Enabled: {{ sync_config.sync_enabled | default(true) }}
+      Destinations: {{ sync_config.sync_destinations | length }}
+  when: verbose_output | default(false)
+
+- name: Skip if sync disabled
+  ansible.builtin.meta: end_host
+  when: not (sync_config.sync_enabled | default(true))
+
+- name: Process each sync destination
+  include_tasks: "sync-{{ destination.type }}.yml"
+  loop: "{{ sync_config.sync_destinations }}"
+  loop_control:
+    loop_var: destination
+  when: 
+    - sync_config.sync_enabled | default(true)
+    - destination.enabled | default(true)
+

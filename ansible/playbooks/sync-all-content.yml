@@ -1,0 +1,9 @@
+---
+- name: Sync All Content Based on Metadata
+  hosts: localhost
+  gather_facts: true
+  
+  roles:
+    - role: content_sync
+      tags: [sync]
+

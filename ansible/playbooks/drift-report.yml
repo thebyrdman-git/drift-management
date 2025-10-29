@@ -1,0 +1,9 @@
+---
+- name: Generate Drift Report
+  hosts: localhost
+  gather_facts: true
+  
+  roles:
+    - role: drift_detect
+      tags: [drift]
+

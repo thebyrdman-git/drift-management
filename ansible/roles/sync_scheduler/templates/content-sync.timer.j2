@@ -1,0 +1,12 @@
+[Unit]
+Description=Content Sync Timer (every {{ sync_interval }})
+After=network-online.target
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec={{ sync_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

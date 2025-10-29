@@ -1,0 +1,9 @@
+---
+- name: Setup Drift Management Infrastructure
+  hosts: localhost
+  gather_facts: true
+  
+  roles:
+    - role: sync_scheduler
+      tags: [setup]
+

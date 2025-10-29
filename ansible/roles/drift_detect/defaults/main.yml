@@ -1,0 +1,5 @@
+---
+content_scan_paths:
+  - /home/{{ ansible_user_id }}
+drift_report_path: /home/{{ ansible_user_id }}/.local/share/drift-management/reports
+

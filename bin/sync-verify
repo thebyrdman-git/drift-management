@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Verify syncs completed successfully
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+REPORT_DIR="${HOME}/.local/share/drift-management/reports"
+
+if [[ ! -d "${REPORT_DIR}" ]]; then
+    echo -e "${RED}No sync reports found${NC}"
+    exit 1
+fi
+
+LATEST_REPORT=$(ls -t "${REPORT_DIR}"/sync-summary-* 2>/dev/null | head -1)
+
+if [[ -z "${LATEST_REPORT}" ]]; then
+    echo -e "${RED}No sync reports found${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Latest Sync Report:${NC}"
+echo ""
+cat "${LATEST_REPORT}"
+

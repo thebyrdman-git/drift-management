@@ -1,0 +1,20 @@
+---
+# Default variables for content_sync role
+
+# Paths to scan for .sync-config.yml files
+content_scan_paths:
+  - /home/{{ ansible_user_id }}
+
+# Backup directory for pre-sync backups
+backup_dir: /home/{{ ansible_user_id }}/backups
+
+# Report generation
+generate_report: true
+sync_report_path: /home/{{ ansible_user_id }}/.local/share/drift-management/reports
+
+# Verbose output
+verbose_output: false
+
+# Dry run mode (check only, no changes)
+dry_run: false
+

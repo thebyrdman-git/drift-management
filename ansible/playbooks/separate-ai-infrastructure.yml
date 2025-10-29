@@ -1,0 +1,213 @@
+---
+- name: Separate AI Infrastructure from PAI
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+    source_dir: "/home/jbyrd/pai"
+    ai_infra_dir: "/home/jbyrd/ai-infrastructure"
+    backup_dir: "/home/jbyrd/backups"
+    timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+    
+  tasks:
+    - name: Create backup directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+      tags: [always]
+    
+    - name: Create backup of current state
+      ansible.builtin.archive:
+        path: "{{ source_dir }}"
+        dest: "{{ backup_dir }}/pai-before-ai-separation-{{ timestamp }}.tar.gz"
+        format: gz
+        exclude_path:
+          - "{{ source_dir }}/.git"
+          - "{{ source_dir }}/node_modules"
+      tags: [backup, always]
+    
+    - name: Create ai-infrastructure directory structure
+      ansible.builtin.file:
+        path: "{{ ai_infra_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - litellm/docs
+        - litellm/config
+        - fabric/config
+        - fabric/patterns
+        - fabric/docs
+        - models/docs
+        - docs
+        - bin
+        - ansible/roles
+      tags: [structure]
+    
+    - name: Move LiteLLM documentation
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/{{ item }}"
+        dest: "{{ ai_infra_dir }}/litellm/docs/"
+        remote_src: true
+      loop:
+        - FABRIC-LITELLM-CONFIG.md
+        - LITELLM-INTEGRATION.md
+        - LITELLM-SETUP.md
+        - LITELLM-AUTOSTART.md
+      tags: [litellm]
+      
+    - name: Move Fabric documentation
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/{{ item }}"
+        dest: "{{ ai_infra_dir }}/fabric/docs/"
+        remote_src: true
+      loop:
+        - FABRIC-MODEL-SELECTION.md
+      tags: [fabric]
+    
+    - name: Move AI model documentation
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/{{ item }}"
+        dest: "{{ ai_infra_dir }}/models/docs/"
+        remote_src: true
+      loop:
+        - miraclemax-ai-infrastructure-summary.md
+        - rh-internal-models.md
+      tags: [models]
+    
+    - name: Copy LiteLLM tools to ai-infrastructure/bin
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/bin/{{ item }}"
+        dest: "{{ ai_infra_dir }}/bin/"
+        mode: '0755'
+        remote_src: true
+      loop:
+        - pai-litellm-proxy
+        - pai-litellm-service
+        - pai-litellm-start
+        - pai-litellm-test
+        - pai-litellm-example.py
+      tags: [tools, litellm]
+    
+    - name: Copy Fabric tools to ai-infrastructure/bin
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/bin/{{ item }}"
+        dest: "{{ ai_infra_dir }}/bin/"
+        mode: '0755'
+        remote_src: true
+      loop:
+        - pai-fabric
+        - pai-fabric-compliant
+        - fabric
+        - fabric-compliant
+      ignore_errors: true
+      tags: [tools, fabric]
+    
+    - name: Create ai-infrastructure README.md
+      ansible.builtin.copy:
+        dest: "{{ ai_infra_dir }}/README.md"
+        content: |
+          # AI Infrastructure Framework
+          
+          Standalone AI tooling providing LiteLLM proxy, Fabric AI, and Red Hat model access.
+          
+          ## Components
+          
+          - **LiteLLM:** OpenAI-compatible proxy for Red Hat Granite models
+          - **Fabric AI:** Pattern-based AI workflows with compliance
+          - **Models:** Red Hat AI model documentation
+          
+          ## Quick Start
+          
+          ```bash
+          # Start LiteLLM proxy
+          ~/ai-infrastructure/bin/pai-litellm-proxy
+          
+          # Test connection
+          ~/ai-infrastructure/bin/pai-litellm-test
+          
+          # Use Fabric with compliance
+          ~/ai-infrastructure/bin/pai-fabric-compliant --pattern summarize
+          ```
+          
+          ## Documentation
+          
+          - [LiteLLM Setup](litellm/docs/LITELLM-SETUP.md)
+          - [Fabric Integration](litellm/docs/FABRIC-LITELLM-CONFIG.md)
+          - [Red Hat Models](models/docs/rh-internal-models.md)
+          
+          *Separated from PAI on {{ ansible_date_time.date }}*
+        mode: '0644'
+      tags: [docs]
+    
+    - name: Create .sync-config.yml for ai-infrastructure
+      ansible.builtin.copy:
+        dest: "{{ ai_infra_dir }}/.sync-config.yml"
+        content: |
+          ---
+          category: ai-tools
+          description: "LiteLLM proxy, Fabric AI, AI model configs"
+          sync_enabled: true
+          
+          sync_destinations:
+            - type: rsync
+              target: miraclemax.local:/opt/ai-infrastructure
+              interval: 15min
+              enabled: true
+              delete: false
+          
+          exclude_patterns:
+            - "*.pyc"
+            - "__pycache__"
+            - ".git"
+            - "*.log"
+          
+          backup_before_sync: true
+        mode: '0644'
+      tags: [config]
+    
+    - name: Remove moved files from PAI
+      ansible.builtin.file:
+        path: "{{ source_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - FABRIC-LITELLM-CONFIG.md
+        - FABRIC-MODEL-SELECTION.md
+        - LITELLM-INTEGRATION.md
+        - LITELLM-SETUP.md
+        - LITELLM-AUTOSTART.md
+        - miraclemax-ai-infrastructure-summary.md
+        - rh-internal-models.md
+      when: not ansible_check_mode
+      tags: [cleanup]
+    
+    - name: Create symlinks in ~/.local/bin for AI tools
+      ansible.builtin.file:
+        src: "{{ ai_infra_dir }}/bin/{{ item }}"
+        dest: "/home/{{ ansible_user_id }}/.local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - pai-litellm-proxy
+        - pai-litellm-test
+        - pai-fabric
+        - pai-fabric-compliant
+      tags: [symlinks]
+    
+    - name: Display migration summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          ✅ AI INFRASTRUCTURE SEPARATION COMPLETE
+          ========================================
+          
+          New Location: {{ ai_infra_dir }}
+          Backup: {{ backup_dir }}/pai-before-ai-separation-{{ timestamp }}.tar.gz
+          
+          Next Steps:
+          1. Test: ~/ai-infrastructure/bin/pai-litellm-test
+          2. Verify symlinks: ls -la ~/.local/bin/pai-*
+          3. Run sync: content-sync run --category ai-tools
+          ========================================
+      tags: [always]
+

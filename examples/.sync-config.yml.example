@@ -1,0 +1,49 @@
+---
+# Example .sync-config.yml
+# Place this file in the root of any directory you want to sync
+
+# Category: unique identifier for this content
+category: example-project
+
+# Description: what is this content?
+description: "Example project with automated sync"
+
+# Master switch: enable/disable all syncing for this directory
+sync_enabled: true
+
+# Sync destinations: where should this content go?
+sync_destinations:
+  # Example 1: Rsync to remote server (automated every 15 min)
+  - type: rsync
+    target: server.example.com:/opt/example-project
+    interval: 15min
+    enabled: true
+    delete: false        # Don't delete files not in source
+  
+  # Example 2: Push to Git repository (manual)
+  - type: git
+    target: origin       # Git remote name
+    branch: main
+    interval: manual
+    enabled: false       # Disabled - push manually
+  
+  # Example 3: Backup to NAS (daily)
+  - type: rsync
+    target: nas.local:/backups/example-project
+    interval: daily
+    enabled: false       # Disabled for now
+
+# Exclude patterns: what NOT to sync
+exclude_patterns:
+  - "*.pyc"             # Python bytecode
+  - "__pycache__"       # Python cache
+  - ".git"              # Git directory
+  - "*.log"             # Log files
+  - ".DS_Store"         # macOS cruft
+  - "node_modules"      # Node dependencies
+  - "venv"              # Python virtual env
+  - "*.tmp"             # Temp files
+
+# Create backup before syncing?
+backup_before_sync: false
+

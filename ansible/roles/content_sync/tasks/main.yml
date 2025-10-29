@@ -1,0 +1,31 @@
+---
+# Main tasks for content_sync role
+- name: Find all .sync-config.yml files
+  ansible.builtin.find:
+    paths: "{{ content_scan_paths }}"
+    patterns: ".sync-config.yml"
+    recurse: true
+    file_type: file
+  register: sync_config_files
+  tags: [scan]
+
+- name: Display found sync configs
+  ansible.builtin.debug:
+    msg: "Found {{ sync_config_files.matched }} directories with sync configuration"
+  tags: [scan]
+
+- name: Process each sync configuration
+  include_tasks: process-sync-config.yml
+  loop: "{{ sync_config_files.files }}"
+  loop_control:
+    loop_var: config_file
+  when: sync_config_files.matched > 0
+  tags: [sync]
+
+- name: Generate sync summary report
+  ansible.builtin.template:
+    src: sync-summary.j2
+    dest: "{{ sync_report_path }}/sync-summary-{{ ansible_date_time.iso8601_basic_short }}.txt"
+  when: generate_report | bool
+  tags: [report]
+

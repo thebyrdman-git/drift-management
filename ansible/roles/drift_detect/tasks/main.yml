@@ -1,0 +1,21 @@
+---
+# Drift detection role - compare local vs remote content
+- name: Find all .sync-config.yml files
+  ansible.builtin.find:
+    paths: "{{ content_scan_paths }}"
+    patterns: ".sync-config.yml"
+    recurse: true
+  register: sync_configs
+
+- name: Check drift for each configuration
+  include_tasks: check-drift.yml
+  loop: "{{ sync_configs.files }}"
+  loop_control:
+    loop_var: config_file
+
+- name: Generate drift report
+  ansible.builtin.template:
+    src: drift-report.j2
+    dest: "{{ drift_report_path }}/drift-report-{{ ansible_date_time.iso8601_basic_short }}.txt"
+  when: drift_results is defined
+

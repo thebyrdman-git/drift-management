@@ -1,0 +1,5 @@
+---
+sync_interval: 15min
+enable_timer: true
+drift_management_dir: /home/{{ ansible_user_id }}/drift-management
+

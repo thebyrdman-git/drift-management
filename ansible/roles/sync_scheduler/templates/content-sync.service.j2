@@ -1,0 +1,14 @@
+[Unit]
+Description=Content Sync Service
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ drift_management_dir }}/bin/content-sync run --quiet
+WorkingDirectory={{ drift_management_dir }}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Check drift status between local and remote
+
+DRIFT_MGMT_DIR="${HOME}/drift-management"
+PLAYBOOK_DIR="${DRIFT_MGMT_DIR}/ansible/playbooks"
+
+cd "${DRIFT_MGMT_DIR}"
+ansible-playbook "${PLAYBOOK_DIR}/drift-report.yml"
+

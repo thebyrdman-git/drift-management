@@ -1,0 +1,27 @@
+---
+- name: Read sync config
+  ansible.builtin.slurp:
+    src: "{{ config_file.path }}"
+  register: config_content
+
+- name: Parse configuration
+  ansible.builtin.set_fact:
+    sync_config: "{{ config_content.content | b64decode | from_yaml }}"
+    content_dir: "{{ config_file.path | dirname }}"
+
+- name: Check drift for rsync destinations
+  ansible.builtin.command:
+    cmd: "rsync -avn --delete {{ content_dir }}/ {{ dest.target }}/"
+  register: rsync_drift
+  loop: "{{ sync_config.sync_destinations }}"
+  loop_control:
+    loop_var: dest
+  when: dest.type == 'rsync'
+  changed_when: rsync_drift.stdout_lines | length > 0
+  failed_when: false
+
+- name: Record drift results
+  ansible.builtin.set_fact:
+    drift_results: "{{ drift_results | default([]) + [{'category': sync_config.category, 'dir': content_dir, 'has_drift': rsync_drift.changed}] }}"
+  when: rsync_drift is defined
+

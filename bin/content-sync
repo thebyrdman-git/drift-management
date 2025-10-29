@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Content Sync CLI Tool
+
+set -euo pipefail
+
+DRIFT_MGMT_DIR="${HOME}/drift-management"
+PLAYBOOK_DIR="${DRIFT_MGMT_DIR}/ansible/playbooks"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat << EOF
+Usage: content-sync <command> [options]
+
+Commands:
+    run [--category CATEGORY]    Run all syncs or specific category
+    status                       Show sync status and drift
+    verify                       Verify last sync succeeded
+    setup                        Setup drift management (systemd timer)
+    
+Options:
+    --category CATEGORY          Only sync specific category
+    --quiet                      Suppress output
+    --dry-run                    Show what would be synced
+    
+Examples:
+    content-sync run                    # Sync all content
+    content-sync run --category ai-tools    # Sync only ai-tools
+    content-sync status                 # Check drift status
+    content-sync setup                  # Setup automated syncing
+EOF
+    exit 1
+}
+
+run_sync() {
+    local category=""
+    local quiet=""
+    local dry_run=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --category)
+                category="$2"
+                shift 2
+                ;;
+            --quiet)
+                quiet="true"
+                shift
+                ;;
+            --dry-run)
+                dry_run="--check"
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                usage
+                ;;
+        esac
+    done
+    
+    echo -e "${GREEN}🔄 Running content sync...${NC}"
+    
+    cd "${DRIFT_MGMT_DIR}"
+    ansible-playbook "${PLAYBOOK_DIR}/sync-all-content.yml" \
+        ${dry_run} \
+        ${category:+-e "filter_category=${category}"}
+}
+
+show_status() {
+    echo -e "${GREEN}📊 Content Sync Status${NC}"
+    echo ""
+    
+    # Check if timer is running
+    if systemctl --user is-active --quiet content-sync.timer; then
+        echo -e "${GREEN}✓${NC} Automated sync: ENABLED"
+        systemctl --user status content-sync.timer --no-pager | grep "Next"
+    else
+        echo -e "${YELLOW}⚠${NC} Automated sync: DISABLED"
+    fi
+    
+    echo ""
+    echo "Last sync results:"
+    if [[ -d "${HOME}/.local/share/drift-management/reports" ]]; then
+        ls -lt "${HOME}/.local/share/drift-management/reports"/ | head -5
+    else
+        echo "No sync reports found"
+    fi
+}
+
+verify_sync() {
+    echo -e "${GREEN}🔍 Verifying last sync...${NC}"
+    
+    cd "${DRIFT_MGMT_DIR}"
+    ansible-playbook "${PLAYBOOK_DIR}/drift-report.yml"
+}
+
+setup_drift() {
+    echo -e "${GREEN}⚙️  Setting up drift management...${NC}"
+    
+    cd "${DRIFT_MGMT_DIR}"
+    ansible-playbook "${PLAYBOOK_DIR}/setup-drift-management.yml"
+    
+    echo -e "${GREEN}✅ Setup complete!${NC}"
+    echo ""
+    echo "Automated sync will run every 15 minutes."
+    echo "Check status: systemctl --user status content-sync.timer"
+}
+
+# Main command routing
+case "${1:-}" in
+    run)
+        shift
+        run_sync "$@"
+        ;;
+    status)
+        show_status
+        ;;
+    verify)
+        verify_sync
+        ;;
+    setup)
+        setup_drift
+        ;;
+    *)
+        usage
+        ;;
+esac
+
