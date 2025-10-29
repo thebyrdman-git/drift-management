@@ -1,0 +1,72 @@
+---
+# GitLab Repository Manager - Default Standards (Red Hat Internal)
+
+# Repository naming convention (enforced)
+repo_naming_standard: "lowercase-with-dashes"
+
+# Default repository settings for Red Hat GitLab
+gitlab_instance: "gitlab.cee.redhat.com"
+repo_visibility: internal  # internal by default (Red Hat policy)
+repo_description_required: true
+repo_topics_required: true
+
+# Branch protection (enforced on main)
+branch_protection_enabled: true
+protected_branch: main
+require_merge_request_reviews: false  # For personal projects
+allow_force_pushes: false
+allow_branch_deletion: false
+
+# Merge request settings (opinionated)
+merge_method: "squash"  # Always squash, never merge commit
+remove_source_branch_after_merge: true
+only_allow_merge_if_pipeline_succeeds: false  # Enable if CI/CD setup
+
+# Commit standards
+commit_message_format: "conventional"
+require_signed_commits: false
+max_commit_message_length: 72
+
+# Default labels for Red Hat projects
+default_labels:
+  - name: "bug"
+    color: "#d73a4a"
+  - name: "enhancement"
+    color: "#a2eeef"
+  - name: "documentation"
+    color: "#0075ca"
+  - name: "rfe"  # Red Hat specific: Request For Enhancement
+    color: "#8B0000"
+  - name: "customer-request"
+    color: "#FF4500"
+
+# GitLab CLI/API authentication
+gitlab_cli_tool: glab  # GitLab CLI
+require_gitlab_token: true
+gitlab_token_env: "GITLAB_TOKEN"
+
+# Red Hat specific settings
+redhat_compliance_required: true
+include_redhat_templates: true
+
+# Repository creation defaults
+default_repo_settings:
+  issues_enabled: true
+  merge_requests_enabled: true
+  wiki_enabled: false  # Prefer README
+  snippets_enabled: false
+  container_registry_enabled: false  # Enable per-project
+  lfs_enabled: true
+  request_access_enabled: true
+  only_allow_merge_if_pipeline_succeeds: false
+  only_allow_merge_if_all_discussions_are_resolved: false
+
+# Topics/tags standards
+require_minimum_topics: 3
+max_topics: 10
+
+# Red Hat specific: auto-add these topics
+auto_add_redhat_topics:
+  - redhat-internal
+  - tam-tools  # If TAM-related
+

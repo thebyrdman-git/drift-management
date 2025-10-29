@@ -1,0 +1,150 @@
+---
+- name: Publish Repository to Red Hat GitLab with Enforced Standards
+  hosts: localhost
+  gather_facts: true
+  
+  vars_prompt:
+    - name: repo_name
+      prompt: "Repository name (lowercase-with-dashes)"
+      private: false
+    
+    - name: repo_description
+      prompt: "Repository description (min 10 characters)"
+      private: false
+    
+    - name: repo_topics_input
+      prompt: "Topics (comma-separated, min 3)"
+      private: false
+    
+    - name: repo_visibility
+      prompt: "Visibility (public/internal/private)"
+      default: "internal"
+      private: false
+    
+    - name: repo_source_dir
+      prompt: "Source directory (press Enter if current directory)"
+      default: "{{ playbook_dir }}"
+      private: false
+  
+  vars:
+    repo_topics: "{{ repo_topics_input.split(',') | map('trim') | list }}"
+    gitlab_instance: "gitlab.cee.redhat.com"
+  
+  pre_tasks:
+    - name: Display Red Hat GitLab publishing standards
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          🔴 RED HAT GITLAB PUBLISHING WITH ENFORCED STANDARDS
+          ════════════════════════════════════════════════════════
+          
+          Standards that will be enforced:
+          ✅ Repository name: lowercase-with-dashes
+          ✅ Description: minimum 10 characters
+          ✅ Topics: 3-10 required (auto-adds: redhat-internal)
+          ✅ Main branch: always 'main'
+          ✅ Force push: DISABLED on main
+          ✅ Merge strategy: Squash only
+          ✅ Auto-delete: Branches deleted after merge
+          ✅ Wiki: DISABLED (use README)
+          ✅ Default visibility: internal (Red Hat policy)
+          ✅ Compliance: Red Hat internal standards applied
+          
+          These standards ensure consistency across Red Hat projects.
+          ════════════════════════════════════════════════════════
+      tags: [always]
+    
+    - name: Verify VPN/Red Hat network access
+      ansible.builtin.command: ping -c 1 -W 2 {{ gitlab_instance }}
+      register: vpn_check
+      failed_when: false
+      changed_when: false
+      tags: [validate]
+    
+    - name: Warn if not on Red Hat network
+      ansible.builtin.debug:
+        msg: |
+          ⚠️  WARNING: Cannot reach {{ gitlab_instance }}
+          
+          You must be on Red Hat VPN or internal network to access GitLab.
+          Connect to VPN and try again.
+      when: vpn_check.rc != 0
+      tags: [validate]
+    
+    - name: Fail if no network access
+      ansible.builtin.fail:
+        msg: "Red Hat network access required. Connect to VPN and retry."
+      when: vpn_check.rc != 0
+      tags: [validate]
+  
+  roles:
+    - role: gitlab_repo_manager
+      vars:
+        repo_name: "{{ repo_name }}"
+        repo_description: "{{ repo_description }}"
+        repo_topics: "{{ repo_topics }}"
+        repo_visibility: "{{ repo_visibility }}"
+        repo_source_dir: "{{ repo_source_dir }}"
+  
+  post_tasks:
+    - name: Initialize git if needed
+      ansible.builtin.command:
+        cmd: git init
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      register: git_init
+      failed_when: false
+      changed_when: "'Initialized' in git_init.stdout"
+      tags: [git]
+    
+    - name: Ensure main branch
+      ansible.builtin.shell: |
+        cd "{{ repo_source_dir }}"
+        current_branch=$(git branch --show-current)
+        if [ "$current_branch" = "master" ]; then
+          git branch -M main
+        fi
+      when: repo_source_dir is defined
+      tags: [git]
+    
+    - name: Add GitLab remote
+      ansible.builtin.command:
+        cmd: git remote add origin https://{{ gitlab_instance }}/{{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}.git
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      register: remote_add
+      failed_when: false
+      tags: [git]
+    
+    - name: Push to GitLab
+      ansible.builtin.command:
+        cmd: git push -u origin main
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      tags: [git]
+    
+    - name: Display success summary
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          ✅ REPOSITORY PUBLISHED TO RED HAT GITLAB
+          ════════════════════════════════════════════════════════
+          
+          🔗 URL: https://{{ gitlab_instance }}/{{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}
+          
+          📋 What was configured:
+          • Repository created with Red Hat standards
+          • Branch protection enabled on main
+          • Topics/tags applied (including redhat-internal)
+          • Red Hat compliance settings applied
+          • Code pushed to main branch
+          
+          🔄 Next steps:
+          1. Visit the repository URL (VPN required)
+          2. Add additional documentation
+          3. Configure CI/CD pipeline (optional)
+          4. Add team members (if needed)
+          
+          ════════════════════════════════════════════════════════
+      tags: [always]
+

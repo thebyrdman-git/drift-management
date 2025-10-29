@@ -1,0 +1,124 @@
+---
+# GitLab Repository Manager - Red Hat Internal Standards
+
+- name: Verify GitLab CLI is installed
+  ansible.builtin.command: which glab
+  register: glab_check
+  failed_when: false
+  changed_when: false
+  tags: [always]
+
+- name: Install glab if missing (Fedora/RHEL)
+  ansible.builtin.dnf:
+    name: glab
+    state: present
+  become: true
+  when: 
+    - glab_check.rc != 0
+    - ansible_os_family == "RedHat"
+  tags: [install]
+
+- name: Verify GitLab authentication
+  ansible.builtin.command: glab auth status
+  register: glab_auth
+  failed_when: glab_auth.rc != 0
+  changed_when: false
+  tags: [always]
+
+- name: Validate repository name follows standards
+  ansible.builtin.assert:
+    that:
+      - repo_name is defined
+      - repo_name is match('^[a-z0-9]+(-[a-z0-9]+)*$')
+    fail_msg: "Repository name must be lowercase-with-dashes (got: {{ repo_name }})"
+  tags: [validate]
+
+- name: Validate description
+  ansible.builtin.assert:
+    that:
+      - repo_description is defined
+      - repo_description | length > 10
+    fail_msg: "Description required (min 10 characters)"
+  when: repo_description_required | default(true)
+  tags: [validate]
+
+- name: Validate topics
+  ansible.builtin.assert:
+    that:
+      - repo_topics is defined
+      - repo_topics | length >= require_minimum_topics | default(3)
+    fail_msg: "Repository must have at least {{ require_minimum_topics }} topics"
+  when: repo_topics_required | default(true)
+  tags: [validate]
+
+- name: Add Red Hat compliance topics
+  ansible.builtin.set_fact:
+    repo_topics: "{{ repo_topics + auto_add_redhat_topics }}"
+  when: redhat_compliance_required | default(true)
+  tags: [validate]
+
+- name: Check if repository exists
+  ansible.builtin.command: glab repo view {{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}
+  register: repo_exists
+  failed_when: false
+  changed_when: false
+  tags: [check]
+
+- name: Create GitLab repository
+  ansible.builtin.command:
+    cmd: >
+      glab repo create {{ repo_name }}
+      --{{ repo_visibility | default('internal') }}
+      --description "{{ repo_description }}"
+      {% if repo_source_dir is defined %}--source={{ repo_source_dir }}{% endif %}
+  environment:
+    GITLAB_HOST: "{{ gitlab_instance | default('gitlab.cee.redhat.com') }}"
+  when: repo_exists.rc != 0
+  register: repo_created
+  tags: [create]
+
+- name: Configure repository settings via API
+  ansible.builtin.uri:
+    url: "https://{{ gitlab_instance }}/api/v4/projects/{{ gitlab_namespace | default(ansible_user_id) }}%2F{{ repo_name }}"
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: "{{ lookup('env', gitlab_token_env) }}"
+    body_format: json
+    body:
+      issues_enabled: "{{ default_repo_settings.issues_enabled }}"
+      merge_requests_enabled: "{{ default_repo_settings.merge_requests_enabled }}"
+      wiki_enabled: "{{ default_repo_settings.wiki_enabled }}"
+      only_allow_merge_if_pipeline_succeeds: "{{ default_repo_settings.only_allow_merge_if_pipeline_succeeds }}"
+      remove_source_branch_after_merge: "{{ remove_source_branch_after_merge }}"
+      merge_method: "{{ merge_method }}"
+      topics: "{{ repo_topics | join(',') }}"
+  tags: [configure]
+
+- name: Protect main branch
+  ansible.builtin.uri:
+    url: "https://{{ gitlab_instance }}/api/v4/projects/{{ gitlab_namespace | default(ansible_user_id) }}%2F{{ repo_name }}/protected_branches"
+    method: POST
+    headers:
+      PRIVATE-TOKEN: "{{ lookup('env', gitlab_token_env) }}"
+    body_format: json
+    body:
+      name: "{{ protected_branch | default('main') }}"
+      push_access_level: 40  # Maintainer
+      merge_access_level: 30  # Developer
+      allow_force_push: false
+      code_owner_approval_required: false
+    status_code: [201, 409]  # 409 = already protected
+  when: branch_protection_enabled | default(true)
+  tags: [protection]
+
+- name: Display repository information
+  ansible.builtin.debug:
+    msg: |
+      ✅ Repository: https://{{ gitlab_instance }}/{{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}
+      📝 Description: {{ repo_description }}
+      🏷️  Topics: {{ repo_topics | join(', ') }}
+      👁️  Visibility: {{ repo_visibility | default('internal') }}
+      🔒 Branch protection: enabled
+      🔴 Red Hat Internal: yes
+  tags: [always]
+

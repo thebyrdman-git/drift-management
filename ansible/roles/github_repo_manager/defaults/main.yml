@@ -1,0 +1,65 @@
+---
+# GitHub Repository Manager - Default Standards
+
+# Repository naming convention (enforced)
+repo_naming_standard: "lowercase-with-dashes"  # Never camelCase or underscores
+
+# Default repository settings (opinionated best practices)
+repo_visibility: public  # default: public unless explicitly private
+repo_description_required: true  # Every repo MUST have description
+repo_topics_required: true  # Every repo MUST have topics/tags
+
+# Branch protection (enforced on main/master)
+branch_protection_enabled: true
+protected_branch: main  # Always 'main', never 'master'
+require_pull_request_reviews: false  # For personal repos
+allow_force_pushes: false  # NEVER allow force push to main
+allow_deletions: false  # NEVER allow branch deletion
+
+# Commit standards (enforced)
+commit_message_format: "conventional"  # feat:, fix:, docs:, etc.
+require_signed_commits: false  # Enable if GPG configured
+max_commit_message_length: 72  # First line
+
+# Default labels (applied to all repos)
+default_labels:
+  - name: "bug"
+    color: "d73a4a"
+    description: "Something isn't working"
+  - name: "enhancement"
+    color: "a2eeef"
+    description: "New feature or request"
+  - name: "documentation"
+    color: "0075ca"
+    description: "Improvements or additions to documentation"
+  - name: "good first issue"
+    color: "7057ff"
+    description: "Good for newcomers"
+
+# Default files to include (if not present)
+include_default_files: true
+default_files:
+  - LICENSE  # MIT by default
+  - .gitignore
+  - CONTRIBUTING.md
+  - CODE_OF_CONDUCT.md
+
+# GitHub CLI authentication
+github_cli_tool: gh
+require_github_auth: true
+
+# Repository creation defaults
+default_repo_settings:
+  has_issues: true
+  has_projects: false  # Projects not needed for most repos
+  has_wiki: false  # Prefer README and docs/ directory
+  has_downloads: true
+  allow_squash_merge: true
+  allow_merge_commit: false  # Prefer squash
+  allow_rebase_merge: false  # Prefer squash
+  delete_branch_on_merge: true  # Clean up after merge
+
+# Topics/tags standards (enforced)
+require_minimum_topics: 3
+max_topics: 10
+

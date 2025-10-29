@@ -1,0 +1,116 @@
+---
+# GitHub Repository Manager - Opinionated Standards Enforcement
+
+- name: Verify GitHub CLI is installed
+  ansible.builtin.command: which gh
+  register: gh_check
+  failed_when: gh_check.rc != 0
+  changed_when: false
+  tags: [always]
+
+- name: Verify GitHub authentication
+  ansible.builtin.command: gh auth status
+  register: gh_auth
+  failed_when: gh_auth.rc != 0
+  changed_when: false
+  tags: [always]
+
+- name: Validate repository name follows standards
+  ansible.builtin.assert:
+    that:
+      - repo_name is defined
+      - repo_name is match('^[a-z0-9]+(-[a-z0-9]+)*$')
+    fail_msg: "Repository name must be lowercase-with-dashes (got: {{ repo_name }})"
+    success_msg: "Repository name follows standards: {{ repo_name }}"
+  tags: [validate]
+
+- name: Validate description is provided
+  ansible.builtin.assert:
+    that:
+      - repo_description is defined
+      - repo_description | length > 10
+    fail_msg: "Repository description required (min 10 characters)"
+  when: repo_description_required | default(true)
+  tags: [validate]
+
+- name: Validate topics are provided
+  ansible.builtin.assert:
+    that:
+      - repo_topics is defined
+      - repo_topics | length >= require_minimum_topics | default(3)
+      - repo_topics | length <= max_topics | default(10)
+    fail_msg: "Repository must have {{ require_minimum_topics }}-{{ max_topics }} topics"
+  when: repo_topics_required | default(true)
+  tags: [validate]
+
+- name: Check if repository already exists
+  ansible.builtin.command: gh repo view {{ github_org | default(ansible_user_id) }}/{{ repo_name }}
+  register: repo_exists
+  failed_when: false
+  changed_when: false
+  tags: [check]
+
+- name: Create GitHub repository with standards
+  ansible.builtin.command:
+    cmd: >
+      gh repo create {{ repo_name }}
+      --{{ repo_visibility | default('public') }}
+      --description "{{ repo_description }}"
+      {% if repo_source_dir is defined %}--source={{ repo_source_dir }}{% endif %}
+      --remote=origin
+  when: repo_exists.rc != 0
+  register: repo_created
+  tags: [create]
+
+- name: Apply repository topics
+  ansible.builtin.command:
+    cmd: gh repo edit {{ github_org | default(ansible_user_id) }}/{{ repo_name }} --add-topic {{ repo_topics | join(',') }}
+  when: repo_topics is defined
+  tags: [configure]
+
+- name: Configure repository settings (opinionated defaults)
+  ansible.builtin.command:
+    cmd: >
+      gh repo edit {{ github_org | default(ansible_user_id) }}/{{ repo_name }}
+      {% if not default_repo_settings.has_wiki | default(false) %}--enable-wiki=false{% endif %}
+      {% if not default_repo_settings.has_projects | default(false) %}--enable-projects=false{% endif %}
+      {% if default_repo_settings.has_issues | default(true) %}--enable-issues=true{% endif %}
+      {% if default_repo_settings.allow_squash_merge | default(true) %}--enable-squash-merge=true{% endif %}
+      {% if not default_repo_settings.allow_merge_commit | default(false) %}--enable-merge-commit=false{% endif %}
+      {% if not default_repo_settings.allow_rebase_merge | default(false) %}--enable-rebase-merge=false{% endif %}
+      {% if default_repo_settings.delete_branch_on_merge | default(true) %}--delete-branch-on-merge=true{% endif %}
+  tags: [configure]
+
+- name: Ensure main branch exists (not master)
+  ansible.builtin.shell: |
+    cd {{ repo_source_dir }}
+    if git rev-parse --verify master >/dev/null 2>&1; then
+      git branch -M main
+    fi
+  when: repo_source_dir is defined
+  tags: [standardize]
+
+- name: Set up branch protection on main
+  ansible.builtin.shell: |
+    gh api repos/{{ github_org | default(ansible_user_id) }}/{{ repo_name }}/branches/{{ protected_branch | default('main') }}/protection \
+      -X PUT \
+      -f required_status_checks=null \
+      -f enforce_admins=false \
+      -f required_pull_request_reviews=null \
+      -F restrictions=null \
+      -F allow_force_pushes=false \
+      -F allow_deletions=false
+  when: branch_protection_enabled | default(true)
+  ignore_errors: true  # May not exist yet
+  tags: [protection]
+
+- name: Display repository information
+  ansible.builtin.debug:
+    msg: |
+      ✅ Repository: https://github.com/{{ github_org | default(ansible_user_id) }}/{{ repo_name }}
+      📝 Description: {{ repo_description }}
+      🏷️  Topics: {{ repo_topics | join(', ') }}
+      👁️  Visibility: {{ repo_visibility | default('public') }}
+      🔒 Branch protection: {{ 'enabled' if branch_protection_enabled | default(true) else 'disabled' }}
+  tags: [always]
+

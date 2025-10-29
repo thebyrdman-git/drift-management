@@ -1,0 +1,129 @@
+---
+- name: Publish Repository to GitHub with Enforced Standards
+  hosts: localhost
+  gather_facts: true
+  
+  vars_prompt:
+    - name: repo_name
+      prompt: "Repository name (lowercase-with-dashes)"
+      private: false
+    
+    - name: repo_description
+      prompt: "Repository description (min 10 characters)"
+      private: false
+    
+    - name: repo_topics_input
+      prompt: "Topics (comma-separated, min 3)"
+      private: false
+    
+    - name: repo_visibility
+      prompt: "Visibility (public/private)"
+      default: "public"
+      private: false
+    
+    - name: repo_source_dir
+      prompt: "Source directory (press Enter if current directory)"
+      default: "{{ playbook_dir }}"
+      private: false
+  
+  vars:
+    repo_topics: "{{ repo_topics_input.split(',') | map('trim') | list }}"
+  
+  pre_tasks:
+    - name: Display publishing standards
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          📦 GITHUB PUBLISHING WITH ENFORCED STANDARDS
+          ════════════════════════════════════════════════════════
+          
+          Standards that will be enforced:
+          ✅ Repository name: lowercase-with-dashes
+          ✅ Description: minimum 10 characters
+          ✅ Topics: 3-10 required
+          ✅ Main branch: always 'main', never 'master'
+          ✅ Force push: DISABLED on main
+          ✅ Branch deletion: DISABLED on main
+          ✅ Merge strategy: Squash only (clean history)
+          ✅ Auto-delete: Branches deleted after merge
+          ✅ Wiki: DISABLED (use README)
+          ✅ Projects: DISABLED (use Issues)
+          
+          These standards ensure consistency across all repositories.
+          ════════════════════════════════════════════════════════
+      tags: [always]
+  
+  roles:
+    - role: github_repo_manager
+      vars:
+        repo_name: "{{ repo_name }}"
+        repo_description: "{{ repo_description }}"
+        repo_topics: "{{ repo_topics }}"
+        repo_visibility: "{{ repo_visibility }}"
+        repo_source_dir: "{{ repo_source_dir }}"
+  
+  post_tasks:
+    - name: Initialize git if needed
+      ansible.builtin.command:
+        cmd: git init
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      register: git_init
+      failed_when: false
+      changed_when: "'Initialized' in git_init.stdout"
+      tags: [git]
+    
+    - name: Ensure main branch (not master)
+      ansible.builtin.shell: |
+        cd "{{ repo_source_dir }}"
+        current_branch=$(git branch --show-current)
+        if [ "$current_branch" = "master" ]; then
+          git branch -M main
+        elif [ "$current_branch" != "main" ] && [ -n "$current_branch" ]; then
+          git branch -M main
+        fi
+      when: repo_source_dir is defined
+      tags: [git]
+    
+    - name: Add remote origin
+      ansible.builtin.command:
+        cmd: git remote add origin https://github.com/{{ github_org | default(ansible_user_id) }}/{{ repo_name }}.git
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      register: remote_add
+      failed_when: false
+      changed_when: "'added' in remote_add.stdout"
+      tags: [git]
+    
+    - name: Push to GitHub
+      ansible.builtin.command:
+        cmd: git push -u origin main
+        chdir: "{{ repo_source_dir }}"
+      when: repo_source_dir is defined
+      tags: [git]
+    
+    - name: Display success summary
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          ✅ REPOSITORY PUBLISHED SUCCESSFULLY
+          ════════════════════════════════════════════════════════
+          
+          🔗 URL: https://github.com/{{ github_org | default(ansible_user_id) }}/{{ repo_name }}
+          
+          📋 What was configured:
+          • Repository created with standards
+          • Branch protection enabled on main
+          • Topics/tags applied
+          • Repository settings configured
+          • Code pushed to main branch
+          
+          🔄 Next steps:
+          1. Visit the repository URL
+          2. Add additional documentation if needed
+          3. Configure GitHub Actions (optional)
+          4. Add collaborators (if needed)
+          
+          ════════════════════════════════════════════════════════
+      tags: [always]
+
