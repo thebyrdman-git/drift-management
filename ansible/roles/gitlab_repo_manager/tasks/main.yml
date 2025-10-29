@@ -1,124 +1,196 @@
 ---
 # GitLab Repository Manager - Red Hat Internal Standards
 
-- name: Verify GitLab CLI is installed
-  ansible.builtin.command: which glab
-  register: glab_check
-  failed_when: false
-  changed_when: false
+- name: Check for GitLab token in environment
+  ansible.builtin.set_fact:
+    gitlab_api_token: "{{ lookup('env', gitlab_token_env) }}"
+  no_log: true
   tags: [always]
 
-- name: Install glab if missing (Fedora/RHEL)
-  ansible.builtin.dnf:
-    name: glab
-    state: present
-  become: true
-  when: 
-    - glab_check.rc != 0
-    - ansible_os_family == "RedHat"
-  tags: [install]
+- name: Load GitLab token from file if not in environment
+  ansible.builtin.slurp:
+    src: "{{ gitlab_token_file | expanduser }}"
+  register: token_file_content
+  when: not gitlab_api_token or gitlab_api_token == ""
+  failed_when: false
+  no_log: true
+  tags: [always]
 
-- name: Verify GitLab authentication for gitlab.cee.redhat.com
-  ansible.builtin.shell: glab auth status 2>&1 | grep -A 2 "gitlab.cee.redhat.com" | grep -q "Logged in"
-  register: glab_auth
-  failed_when: glab_auth.rc != 0
-  changed_when: false
+- name: Set token from file
+  ansible.builtin.set_fact:
+    gitlab_api_token: "{{ token_file_content.content | b64decode | trim }}"
+  when: 
+    - token_file_content is defined
+    - token_file_content.content is defined
+  no_log: true
+  tags: [always]
+
+- name: Verify GitLab token is available
+  ansible.builtin.fail:
+    msg: |
+      GitLab API token not found!
+      
+      Set token via:
+      1. Environment variable: export GITLAB_TOKEN="glpat-..."
+      2. File: ~/.config/pai/secrets/gitlab-token
+      
+      Get token from: https://gitlab.cee.redhat.com/-/profile/personal_access_tokens
+      Required scopes: api, write_repository
+  when: not gitlab_api_token or gitlab_api_token == ""
+  tags: [always]
+
+- name: Test GitLab API authentication
+  ansible.builtin.uri:
+    url: "{{ gitlab_api_url }}/user"
+    method: GET
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+    validate_certs: true
+    status_code: 200
+  register: gitlab_user
+  no_log: false
+  tags: [always]
+
+- name: Display authenticated user
+  ansible.builtin.debug:
+    msg: "✅ Authenticated as: {{ gitlab_user.json.username }} ({{ gitlab_user.json.name }})"
   tags: [always]
 
 - name: Validate repository name follows standards
   ansible.builtin.assert:
     that:
       - repo_name is defined
-      - repo_name is match('^[a-z0-9]+(-[a-z0-9]+)*$')
-    fail_msg: "Repository name must be lowercase-with-dashes (got: {{ repo_name }})"
+      - repo_name | length > 0
+      - repo_name is match('^[a-z0-9][a-z0-9-]*[a-z0-9]$')
+    fail_msg: |
+      Repository name must follow Red Hat standards:
+      • Lowercase letters and numbers only
+      • Hyphens allowed (not at start/end)
+      • Example: drift-management, tam-tools, ansible-playbooks
+      
+      Invalid name: {{ repo_name | default('undefined') }}
   tags: [validate]
 
-- name: Validate description
+- name: Validate description meets requirements
   ansible.builtin.assert:
     that:
       - repo_description is defined
-      - repo_description | length > 10
-    fail_msg: "Description required (min 10 characters)"
+      - repo_description | length >= 10
+    fail_msg: |
+      Repository description required (minimum 10 characters).
+      Current: {{ repo_description | default('undefined') | length }} characters
   when: repo_description_required | default(true)
   tags: [validate]
 
-- name: Validate topics
+- name: Validate topics meet requirements
   ansible.builtin.assert:
     that:
       - repo_topics is defined
-      - repo_topics | length >= require_minimum_topics | default(3)
-    fail_msg: "Repository must have at least {{ require_minimum_topics }} topics"
+      - repo_topics | length >= require_minimum_topics
+      - repo_topics | length <= max_topics
+    fail_msg: |
+      Topics required: {{ require_minimum_topics }}-{{ max_topics }}
+      Current: {{ repo_topics | default([]) | length }}
   when: repo_topics_required | default(true)
   tags: [validate]
 
-- name: Add Red Hat compliance topics
+- name: Combine topics with Red Hat defaults
   ansible.builtin.set_fact:
-    repo_topics: "{{ repo_topics + auto_add_redhat_topics }}"
-  when: redhat_compliance_required | default(true)
+    final_topics: "{{ (repo_topics | default([]) + auto_add_redhat_topics) | unique }}"
   tags: [validate]
 
-- name: Check if repository exists
-  ansible.builtin.command: glab repo view {{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}
-  register: repo_exists
-  failed_when: false
-  changed_when: false
-  tags: [check]
-
-- name: Create GitLab repository
-  ansible.builtin.command:
-    cmd: >
-      glab repo create {{ repo_name }}
-      --{{ repo_visibility | default('internal') }}
-      --description "{{ repo_description }}"
-      {% if repo_source_dir is defined %}--source={{ repo_source_dir }}{% endif %}
-  environment:
-    GITLAB_HOST: "{{ gitlab_instance | default('gitlab.cee.redhat.com') }}"
-  when: repo_exists.rc != 0
-  register: repo_created
+- name: Check if repository already exists
+  ansible.builtin.uri:
+    url: "{{ gitlab_api_url }}/projects/{{ gitlab_user.json.username }}%2F{{ repo_name }}"
+    method: GET
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+    validate_certs: true
+    status_code: [200, 404]
+  register: repo_check
+  no_log: false
   tags: [create]
 
-- name: Configure repository settings via API
+- name: Display repository status
+  ansible.builtin.debug:
+    msg: "{{ '✅ Repository exists' if repo_check.status == 200 else '📝 Creating new repository' }}"
+  tags: [create]
+
+- name: Create GitLab repository via API
   ansible.builtin.uri:
-    url: "https://{{ gitlab_instance }}/api/v4/projects/{{ gitlab_namespace | default(ansible_user_id) }}%2F{{ repo_name }}"
-    method: PUT
+    url: "{{ gitlab_api_url }}/projects"
+    method: POST
     headers:
-      PRIVATE-TOKEN: "{{ lookup('env', gitlab_token_env) }}"
+      PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+      Content-Type: "application/json"
     body_format: json
     body:
+      name: "{{ repo_name }}"
+      path: "{{ repo_name }}"
+      description: "{{ repo_description }}"
+      visibility: "{{ repo_visibility | default(default_repo_visibility) }}"
+      initialize_with_readme: false
+      default_branch: "main"
+      topics: "{{ final_topics }}"
       issues_enabled: "{{ default_repo_settings.issues_enabled }}"
       merge_requests_enabled: "{{ default_repo_settings.merge_requests_enabled }}"
       wiki_enabled: "{{ default_repo_settings.wiki_enabled }}"
+      snippets_enabled: "{{ default_repo_settings.snippets_enabled }}"
+      lfs_enabled: "{{ default_repo_settings.lfs_enabled }}"
+      request_access_enabled: "{{ default_repo_settings.request_access_enabled }}"
       only_allow_merge_if_pipeline_succeeds: "{{ default_repo_settings.only_allow_merge_if_pipeline_succeeds }}"
+      squash_option: "always"
       remove_source_branch_after_merge: "{{ remove_source_branch_after_merge }}"
-      merge_method: "{{ merge_method }}"
-      topics: "{{ repo_topics | join(',') }}"
-  tags: [configure]
+    validate_certs: true
+    status_code: 201
+  register: repo_created
+  when: repo_check.status == 404
+  no_log: false
+  tags: [create]
 
-- name: Protect main branch
+- name: Set repository facts
+  ansible.builtin.set_fact:
+    gitlab_repo_id: "{{ repo_created.json.id if repo_check.status == 404 else repo_check.json.id }}"
+    gitlab_repo_url: "{{ repo_created.json.web_url if repo_check.status == 404 else repo_check.json.web_url }}"
+    gitlab_repo_ssh: "{{ repo_created.json.ssh_url_to_repo if repo_check.status == 404 else repo_check.json.ssh_url_to_repo }}"
+    gitlab_repo_https: "{{ repo_created.json.http_url_to_repo if repo_check.status == 404 else repo_check.json.http_url_to_repo }}"
+  tags: [create]
+
+- name: Configure branch protection for main
   ansible.builtin.uri:
-    url: "https://{{ gitlab_instance }}/api/v4/projects/{{ gitlab_namespace | default(ansible_user_id) }}%2F{{ repo_name }}/protected_branches"
+    url: "{{ gitlab_api_url }}/projects/{{ gitlab_repo_id }}/protected_branches"
     method: POST
     headers:
-      PRIVATE-TOKEN: "{{ lookup('env', gitlab_token_env) }}"
+      PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+      Content-Type: "application/json"
     body_format: json
     body:
-      name: "{{ protected_branch | default('main') }}"
+      name: "{{ protected_branch }}"
       push_access_level: 40  # Maintainer
-      merge_access_level: 30  # Developer
-      allow_force_push: false
-      code_owner_approval_required: false
+      merge_access_level: 40  # Maintainer
+      allow_force_push: "{{ allow_force_pushes }}"
+    validate_certs: true
     status_code: [201, 409]  # 409 = already protected
-  when: branch_protection_enabled | default(true)
-  tags: [protection]
+  when: 
+    - branch_protection_enabled | default(true)
+    - repo_check.status == 404  # Only for new repos
+  tags: [configure]
 
 - name: Display repository information
   ansible.builtin.debug:
     msg: |
-      ✅ Repository: https://{{ gitlab_instance }}/{{ gitlab_namespace | default(ansible_user_id) }}/{{ repo_name }}
-      📝 Description: {{ repo_description }}
-      🏷️  Topics: {{ repo_topics | join(', ') }}
-      👁️  Visibility: {{ repo_visibility | default('internal') }}
-      🔒 Branch protection: enabled
-      🔴 Red Hat Internal: yes
+      ════════════════════════════════════════════════════════
+      ✅ GITLAB REPOSITORY {{ 'CREATED' if repo_check.status == 404 else 'CONFIGURED' }}
+      ════════════════════════════════════════════════════════
+      
+      📦 Repository: {{ repo_name }}
+      🔗 URL: {{ gitlab_repo_url }}
+      🔒 Visibility: {{ repo_visibility }}
+      📝 Topics: {{ final_topics | join(', ') }}
+      
+      🔐 Clone URLs:
+      • HTTPS: {{ gitlab_repo_https }}
+      • SSH: {{ gitlab_repo_ssh }}
+      
+      ════════════════════════════════════════════════════════
   tags: [always]
-

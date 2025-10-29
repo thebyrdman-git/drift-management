@@ -7,7 +7,12 @@
     content_dir: "/home/jbyrd/drift-management"
     repo_name: "drift-management"
     repo_description: "Multi-system content synchronization with metadata-driven configuration"
-    repo_topics_input: "ansible,drift-management,automation,content-sync,devops"
+    repo_topics:
+      - ansible
+      - drift-management
+      - automation
+      - content-sync
+      - devops
     repo_visibility: "internal"
     gitlab_namespace: "jbyrd"
   
@@ -75,13 +80,6 @@
     - name: Include GitLab publishing
       ansible.builtin.include_role:
         name: gitlab_repo_manager
-      vars:
-        repo_name: "{{ repo_name }}"
-        repo_description: "{{ repo_description }}"
-        repo_topics: "{{ repo_topics_input.split(',') | map('trim') | list }}"
-        repo_visibility: "{{ repo_visibility }}"
-        repo_source_dir: "{{ content_dir }}"
-        gitlab_namespace: "{{ gitlab_namespace }}"
       tags: [publish]
     
     - name: Push to GitLab

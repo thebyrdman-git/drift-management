@@ -6,7 +6,14 @@ repo_naming_standard: "lowercase-with-dashes"
 
 # Default repository settings for Red Hat GitLab
 gitlab_instance: "gitlab.cee.redhat.com"
-repo_visibility: internal  # internal by default (Red Hat policy)
+gitlab_api_url: "https://gitlab.cee.redhat.com/api/v4"
+
+# Authentication - API token preferred over glab CLI
+gitlab_token_env: "GITLAB_TOKEN"
+gitlab_token_file: "~/.config/pai/secrets/gitlab-token"
+
+# Repository defaults (can be overridden)
+default_repo_visibility: internal  # internal by default (Red Hat policy)
 repo_description_required: true
 repo_topics_required: true
 
@@ -40,11 +47,6 @@ default_labels:
   - name: "customer-request"
     color: "#FF4500"
 
-# GitLab CLI/API authentication
-gitlab_cli_tool: glab  # GitLab CLI
-require_gitlab_token: true
-gitlab_token_env: "GITLAB_TOKEN"
-
 # Red Hat specific settings
 redhat_compliance_required: true
 include_redhat_templates: true
@@ -68,5 +70,4 @@ max_topics: 10
 # Red Hat specific: auto-add these topics
 auto_add_redhat_topics:
   - redhat-internal
-  - tam-tools  # If TAM-related
 
