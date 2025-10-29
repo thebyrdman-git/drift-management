@@ -15,14 +15,25 @@
       - devops
     repo_visibility: "internal"
     gitlab_namespace: "jbyrd"
+    
+    # Progress tracking
+    playbook_start_time: "{{ ansible_date_time.iso8601 }}"
   
   pre_tasks:
-    - name: Display security notice
+    - name: "STAGE 1/5: Display security notice"
       ansible.builtin.debug:
         msg: |
           ════════════════════════════════════════════════════════
           🔒 SECURE GITLAB PUBLISHING WORKFLOW
           ════════════════════════════════════════════════════════
+          
+          Stage 1: Security scanning and validation
+          Stage 2: VPN connectivity check
+          Stage 3: Repository creation via API
+          Stage 4: Git push to GitLab
+          Stage 5: Verification and summary
+          
+          Started: {{ playbook_start_time }}
           
           Security Process:
           1. ✅ Scan for sensitive data
@@ -39,6 +50,11 @@
           
           ════════════════════════════════════════════════════════
       tags: [always]
+    
+    - name: "STAGE 1/5: Record start time"
+      ansible.builtin.set_fact:
+        stage1_start: "{{ ansible_date_time.epoch }}"
+      tags: [always]
   
   roles:
     - role: content_sanitizer
@@ -47,12 +63,27 @@
       tags: [sanitize]
   
   tasks:
-    - name: Display VPN check
+    - name: "STAGE 1/5: Complete - Calculate duration"
+      ansible.builtin.set_fact:
+        stage1_duration: "{{ ansible_date_time.epoch | int - stage1_start | int }}"
+      tags: [always]
+    
+    - name: "STAGE 1/5: Security scan complete"
+      ansible.builtin.debug:
+        msg: "✅ Stage 1 complete in {{ stage1_duration }}s - Content sanitized and validated"
+      tags: [always]
+    
+    - name: "STAGE 2/5: VPN connectivity check"
       ansible.builtin.debug:
         msg: "Checking Red Hat network access..."
       tags: [validate]
     
-    - name: Verify Red Hat network access
+    - name: "STAGE 2/5: Record start time"
+      ansible.builtin.set_fact:
+        stage2_start: "{{ ansible_date_time.epoch }}"
+      tags: [validate]
+    
+    - name: "STAGE 2/5: Verify Red Hat network access"
       ansible.builtin.uri:
         url: https://gitlab.cee.redhat.com
         method: GET
@@ -63,7 +94,7 @@
       changed_when: false
       tags: [validate]
     
-    - name: Fail if not on Red Hat network
+    - name: "STAGE 2/5: Fail if not on Red Hat network"
       ansible.builtin.fail:
         msg: |
           ⚠️  Not connected to Red Hat network!
@@ -74,15 +105,55 @@
           Then retry this playbook.
       when: vpn_check.status is not defined or vpn_check.status not in [200, 302, 401]
       tags: [validate]
+    
+    - name: "STAGE 2/5: Complete - Calculate duration"
+      ansible.builtin.set_fact:
+        stage2_duration: "{{ ansible_date_time.epoch | int - stage2_start | int }}"
+      tags: [validate]
+    
+    - name: "STAGE 2/5: VPN check complete"
+      ansible.builtin.debug:
+        msg: "✅ Stage 2 complete in {{ stage2_duration }}s - Connected to Red Hat network"
+      tags: [validate]
   
   # Only proceed with GitLab publish if sanitization passed
   post_tasks:
-    - name: Include GitLab publishing
+    - name: "STAGE 3/5: GitLab repository creation"
+      ansible.builtin.debug:
+        msg: "Creating repository {{ repo_name }} on GitLab CEE..."
+      tags: [publish]
+    
+    - name: "STAGE 3/5: Record start time"
+      ansible.builtin.set_fact:
+        stage3_start: "{{ ansible_date_time.epoch }}"
+      tags: [publish]
+    
+    - name: "STAGE 3/5: Include GitLab publishing"
       ansible.builtin.include_role:
         name: gitlab_repo_manager
       tags: [publish]
     
-    - name: Push to GitLab
+    - name: "STAGE 3/5: Complete - Calculate duration"
+      ansible.builtin.set_fact:
+        stage3_duration: "{{ ansible_date_time.epoch | int - stage3_start | int }}"
+      tags: [publish]
+    
+    - name: "STAGE 3/5: Repository creation complete"
+      ansible.builtin.debug:
+        msg: "✅ Stage 3 complete in {{ stage3_duration }}s - Repository {{ repo_name }} created"
+      tags: [publish]
+    
+    - name: "STAGE 4/5: Git push to GitLab"
+      ansible.builtin.debug:
+        msg: "Pushing content to {{ gitlab_repo_https }}..."
+      tags: [publish]
+    
+    - name: "STAGE 4/5: Record start time"
+      ansible.builtin.set_fact:
+        stage4_start: "{{ ansible_date_time.epoch }}"
+      tags: [publish]
+    
+    - name: "STAGE 4/5: Push to GitLab"
       ansible.builtin.command:
         cmd: git push gitlab main
         chdir: "{{ content_dir }}"
@@ -90,23 +161,33 @@
       failed_when: false
       tags: [publish]
     
-    - name: Add GitLab remote if needed
+    - name: "STAGE 4/5: Add GitLab remote if needed"
       ansible.builtin.command:
-        cmd: git remote add gitlab https://gitlab.cee.redhat.com/{{ gitlab_namespace }}/{{ repo_name }}.git
+        cmd: git remote add gitlab {{ gitlab_repo_https }}
         chdir: "{{ content_dir }}"
       when: git_push.rc != 0 and 'No such remote' in git_push.stderr
       register: remote_add
       failed_when: false
       tags: [publish]
     
-    - name: Retry push to GitLab
+    - name: "STAGE 4/5: Retry push to GitLab"
       ansible.builtin.command:
         cmd: git push -u gitlab main
         chdir: "{{ content_dir }}"
       when: remote_add is changed
       tags: [publish]
     
-    - name: Display success summary
+    - name: "STAGE 4/5: Complete - Calculate duration"
+      ansible.builtin.set_fact:
+        stage4_duration: "{{ ansible_date_time.epoch | int - stage4_start | int }}"
+      tags: [publish]
+    
+    - name: "STAGE 4/5: Git push complete"
+      ansible.builtin.debug:
+        msg: "✅ Stage 4 complete in {{ stage4_duration }}s - Code pushed to GitLab"
+      tags: [publish]
+    
+    - name: "STAGE 5/5: Display final summary"
       ansible.builtin.debug:
         msg: |
           ════════════════════════════════════════════════════════
@@ -115,14 +196,20 @@
           
           🔗 URL: https://gitlab.cee.redhat.com/{{ gitlab_namespace }}/{{ repo_name }}
           
+          ⏱️  Execution Timeline:
+          • Stage 1 (Security): {{ stage1_duration }}s
+          • Stage 2 (VPN): {{ stage2_duration }}s
+          • Stage 3 (Repo Create): {{ stage3_duration }}s
+          • Stage 4 (Git Push): {{ stage4_duration }}s
+          
           Security Checks Passed:
           ✅ No sensitive data detected
           ✅ No API keys/tokens found
           ✅ No personal secrets exposed
           ✅ Content sanitized and validated
           
+          📋 Full log: ./ansible-execution.log
           📋 Sanitization report: /tmp/sanitization-report.txt
           
           ════════════════════════════════════════════════════════
       tags: [always]
-

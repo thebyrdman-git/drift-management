@@ -1,0 +1,55 @@
+---
+- name: Test GitLab Repository Creation
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    repo_name: "test-repo"
+    repo_description: "Test repository for validating GitLab automation workflow"
+    repo_topics:
+      - test
+      - automation
+      - ansible
+    repo_visibility: internal  # Red Hat internal visibility
+  
+  pre_tasks:
+    - name: Display test notice
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          🧪 TESTING GITLAB REPOSITORY CREATION
+          ════════════════════════════════════════════════════════
+          
+          Test Repository: {{ repo_name }}
+          Visibility: {{ repo_visibility }} (Red Hat Internal)
+          Topics: {{ repo_topics | join(', ') }}
+          
+          This will create a real repository on GitLab CEE.
+          
+          ════════════════════════════════════════════════════════
+  
+  roles:
+    - role: gitlab_repo_manager
+  
+  post_tasks:
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════
+          ✅ TEST REPOSITORY CREATED
+          ════════════════════════════════════════════════════════
+          
+          🔗 Repository: {{ gitlab_repo_url }}
+          🔒 Visibility: internal (Red Hat only)
+          📋 Topics: {{ final_topics | join(', ') }}
+          
+          Clone URLs:
+          • HTTPS: {{ gitlab_repo_https }}
+          • SSH: {{ gitlab_repo_ssh }}
+          
+          To delete test repo:
+          Visit: {{ gitlab_repo_url }}/-/edit
+          Scroll to bottom → Delete project
+          
+          ════════════════════════════════════════════════════════
+
