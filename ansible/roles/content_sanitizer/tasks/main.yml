@@ -1,0 +1,128 @@
+---
+# Content Sanitizer - Validate Before GitLab Push
+
+- name: Display sanitization check notice
+  ansible.builtin.debug:
+    msg: |
+      🔒 CONTENT SANITIZATION CHECK
+      ════════════════════════════════════════════════════════
+      Scanning for sensitive data before GitLab push...
+      
+      Checking for:
+      • Personal identifiers (emails, usernames)
+      • API keys and tokens
+      • Passwords and secrets
+      • Customer/confidential data
+      • Private IP addresses
+      ════════════════════════════════════════════════════════
+  tags: [always]
+
+- name: Find all files to scan
+  ansible.builtin.find:
+    paths: "{{ content_dir }}"
+    patterns:
+      - "*.yml"
+      - "*.yaml"
+      - "*.md"
+      - "*.sh"
+      - "*.json"
+      - "*.py"
+      - "*.j2"
+    excludes: "{{ exclude_files }}"
+    recurse: true
+  register: files_to_scan
+  tags: [scan]
+
+- name: Scan files for sensitive patterns
+  ansible.builtin.shell: |
+    set -e
+    FOUND=0
+    {% for item in sensitive_patterns %}
+    if grep -rn "{{ item.pattern }}" "{{ file_item.path }}" 2>/dev/null; then
+      echo "{{ item.severity | upper }}: {{ item.message }}"
+      echo "  File: {{ file_item.path }}"
+      {% if item.severity in ['critical', 'high'] %}
+      FOUND=1
+      {% endif %}
+    fi
+    {% endfor %}
+    exit $FOUND
+  loop: "{{ files_to_scan.files }}"
+  loop_control:
+    loop_var: file_item
+    label: "{{ file_item.path | basename }}"
+  register: scan_results
+  failed_when: false
+  changed_when: false
+  tags: [scan]
+
+- name: Check for critical/high severity findings
+  ansible.builtin.set_fact:
+    has_critical_findings: "{{ scan_results.results | selectattr('rc', 'equalto', 1) | list | length > 0 }}"
+  tags: [scan]
+
+- name: Display scan results
+  ansible.builtin.debug:
+    msg: |
+      {% if has_critical_findings %}
+      ❌ CRITICAL FINDINGS DETECTED
+      ════════════════════════════════════════════════════════
+      Sensitive data found in content!
+      
+      Files with issues:
+      {% for result in scan_results.results %}
+      {% if result.rc == 1 %}
+      {{ result.file_item.path }}
+      {{ result.stdout }}
+      {% endif %}
+      {% endfor %}
+      
+      ⚠️  PUSH BLOCKED - Sanitize content before pushing to GitLab
+      ════════════════════════════════════════════════════════
+      {% else %}
+      ✅ SANITIZATION CHECK PASSED
+      ════════════════════════════════════════════════════════
+      No critical sensitive data detected.
+      Content is safe to push to Red Hat GitLab.
+      ════════════════════════════════════════════════════════
+      {% endif %}
+  tags: [always]
+
+- name: Fail if critical findings detected
+  ansible.builtin.fail:
+    msg: "Sensitive data detected. Sanitize content before pushing to GitLab."
+  when: 
+    - has_critical_findings
+    - fail_on_sensitive_data | default(true)
+  tags: [always]
+
+- name: Generate sanitization report
+  ansible.builtin.copy:
+    dest: "{{ report_path }}"
+    content: |
+      Content Sanitization Report
+      Generated: {{ ansible_date_time.iso8601 }}
+      Directory: {{ content_dir }}
+      
+      Files Scanned: {{ files_to_scan.matched }}
+      
+      Findings:
+      {% for result in scan_results.results %}
+      {% if result.stdout | length > 0 %}
+      {{ result.file_item.path }}:
+      {{ result.stdout }}
+      
+      {% endif %}
+      {% endfor %}
+      
+      Status: {{ 'FAILED - Sensitive data found' if has_critical_findings else 'PASSED - Safe to publish' }}
+    mode: '0644'
+  when: generate_report | default(true)
+  tags: [report]
+
+- name: Display report location
+  ansible.builtin.debug:
+    msg: "📋 Full report: {{ report_path }}"
+  when: generate_report | default(true)
+  tags: [always]
+

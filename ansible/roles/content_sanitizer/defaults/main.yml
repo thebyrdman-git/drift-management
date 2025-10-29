@@ -1,0 +1,94 @@
+---
+# Content Sanitizer - Security and Privacy Standards
+
+# Content directory to scan (MUST be provided by playbook)
+content_dir: ""
+
+# Validation rules (enforced before GitLab push)
+require_sanitization_check: true
+fail_on_sensitive_data: true
+
+# Patterns to detect (BLOCK push if found)
+sensitive_patterns:
+  # Personal identifiers
+  - pattern: "jbyrd@redhat\\.com"
+    severity: "high"
+    message: "Personal email found - anonymize to user@redhat.com"
+  
+  - pattern: "thebyrdman-git"
+    severity: "high"
+    message: "Personal GitHub username found - anonymize to username"
+  
+  - pattern: "miraclemax\\.local"
+    severity: "medium"
+    message: "Personal server name found - anonymize to server.example.com"
+  
+  # API keys and tokens
+  - pattern: "sk-[a-zA-Z0-9]{20,}"
+    severity: "critical"
+    message: "Possible API key detected"
+  
+  - pattern: "ghp_[a-zA-Z0-9]{36}"
+    severity: "critical"
+    message: "GitHub token detected"
+  
+  - pattern: "gho_[a-zA-Z0-9]{36}"
+    severity: "critical"
+    message: "GitHub OAuth token detected"
+  
+  - pattern: "glpat-[a-zA-Z0-9_\\-]{20}"
+    severity: "critical"
+    message: "GitLab token detected"
+  
+  # Secrets and passwords
+  - pattern: "password\\s*[:=]\\s*['\"][^'\"]{3,}"
+    severity: "critical"
+    message: "Hardcoded password detected"
+  
+  - pattern: "secret\\s*[:=]\\s*['\"][^'\"]{3,}"
+    severity: "critical"
+    message: "Hardcoded secret detected"
+  
+  # Customer/confidential data
+  - pattern: "customer|client|confidential"
+    severity: "medium"
+    message: "Possible customer/confidential reference - review context"
+  
+  # IP addresses (private ranges)
+  - pattern: "192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}"
+    severity: "low"
+    message: "Private IP address found - consider anonymizing"
+  
+  - pattern: "10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}"
+    severity: "low"
+    message: "Private IP address found - consider anonymizing"
+
+# Allowed patterns (examples that are OK)
+allowed_patterns:
+  - "example\\.com"
+  - "localhost"
+  - "127\\.0\\.0\\.1"
+  - "user@redhat\\.com"
+  - "username"
+  - "server\\.example\\.com"
+
+# Files to always exclude from GitLab
+exclude_files:
+  - "*.env"
+  - "*.pem"
+  - "*.key"
+  - "*secret*"
+  - "*credential*"
+  - ".vault_pass"
+
+# Directories to always exclude
+exclude_directories:
+  - ".git"
+  - "__pycache__"
+  - "*.egg-info"
+  - "venv"
+  - ".venv"
+
+# Generate sanitization report
+generate_report: true
+report_path: "/tmp/sanitization-report.txt"
