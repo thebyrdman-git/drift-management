@@ -48,7 +48,11 @@
       tags: [validate]
     
     - name: Verify Red Hat network access
-      ansible.builtin.command: ping -c 1 -W 2 gitlab.cee.redhat.com
+      ansible.builtin.uri:
+        url: https://gitlab.cee.redhat.com
+        method: GET
+        validate_certs: true
+        timeout: 5
       register: vpn_check
       failed_when: false
       changed_when: false
@@ -63,7 +67,7 @@
           nmcli connection up "1 - Red Hat Global VPN"
           
           Then retry this playbook.
-      when: vpn_check.rc != 0
+      when: vpn_check.status is not defined or vpn_check.status not in [200, 302, 401]
       tags: [validate]
   
   # Only proceed with GitLab publish if sanitization passed

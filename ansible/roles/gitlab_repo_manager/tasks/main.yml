@@ -18,8 +18,8 @@
     - ansible_os_family == "RedHat"
   tags: [install]
 
-- name: Verify GitLab authentication
-  ansible.builtin.command: glab auth status
+- name: Verify GitLab authentication for gitlab.cee.redhat.com
+  ansible.builtin.shell: glab auth status 2>&1 | grep -A 2 "gitlab.cee.redhat.com" | grep -q "Logged in"
   register: glab_auth
   failed_when: glab_auth.rc != 0
   changed_when: false
